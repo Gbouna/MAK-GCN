@@ -162,7 +162,7 @@ class MAK(nn.Module):
         return out
     
 class Net(nn.Module):
-    def __init__(self, args, output_channels=5):
+    def __init__(self, args, output_channels=49):
         super(Net, self).__init__()
         self.args = args
         self.k = args.k
