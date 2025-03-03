@@ -7,22 +7,23 @@ This is the official repository for **Multi-Head Adaptive Graph Convolution Netw
 
 ```
 Create conda environment with python 3.8
-Install cuda toolkit using the command below from this link https://anaconda.org/nvidia/cuda-toolkit
 
+Install cuda toolkit using the command below from this link https://anaconda.org/nvidia/cuda-toolkit
 conda install nvidia/label/cuda-11.8.0::cuda-toolkit
 
+Then, install the following:
 conda install pytorch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 pytorch-cuda=11.8 -c pytorch -c nvidia
-
 conda install conda-forge::tqdm
-
 conda install conda-forge::pytorch_geometric
 
 ```
-`
 # Data Preparation
 
-## Download datasets.
-Download the JHMDB and SHREC datasets using the links below:
+## MiliPoint Datatset.
+
+Download the MiliPoint dataset from their [Google drive](https://drive.google.com/file/d/1rq8yyokrNhAGQryx7trpUqKenDnTI6Ky/view) or from [the Github repo](https://github.com/yizzfz/MiliPoint). Unzip the downloaded data and put the contents in data/raw/:
+
+
 ```
 JHMDB raw data download link:   http://jhmdb.is.tue.mpg.de/challenge/JHMDB/datasets
 SHREC raw data download link:   http://www-rech.telecom-lille.fr/shrec2017-hand/
