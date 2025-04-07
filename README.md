@@ -21,7 +21,7 @@ conda install conda-forge::pytorch_geometric
 
 ### MiliPoint Dataset.
 
-Download the MiliPoint dataset from their [Google drive](https://drive.google.com/file/d/1rq8yyokrNhAGQryx7trpUqKenDnTI6Ky/view) or from [the Github repo](https://github.com/yizzfz/MiliPoint). Unzip the downloaded data and put the contents in data/raw/ according to the file structure below.
+Download the MiliPoint dataset from their [Google drive](https://drive.google.com/file/d/1rq8yyokrNhAGQryx7trpUqKenDnTI6Ky/view) or from [the GitHub repo](https://github.com/yizzfz/MiliPoint). Unzip the downloaded data and put the contents in data/raw/ according to the file structure below.
 
 In the Milipoint folder, according to the file structure below, make a directory data/processed/mmr_action, where the processed data will be stored.
 
@@ -40,7 +40,7 @@ MiliPoint
 
 ### MMActivity Dataset.
 
-Download the MMActivity dataset from their [Github repo](https://github.com/nesl/RadHAR/tree/master/Data)
+Download the MMActivity dataset from their [GitHub repo](https://github.com/nesl/RadHAR/tree/master/Data)
 
 The data consist of two folders: train and test. Each of these folders further contains subfolders corresponding to the respective activity classes.
 
