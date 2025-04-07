@@ -40,7 +40,7 @@ MiliPoint
 
 ### MMActivity Dataset.
 
-Download the MMActivity dataset from their [Github repo](https://github.com/nesl/RadHAR/tree/master/Data)
+Download the MMActivity dataset from their [GitHub repo](https://github.com/nesl/RadHAR/tree/master/Data)
 
 The data consist of two folders: train and test. Each of these folders further contains subfolders corresponding to the respective activity classes.
 
