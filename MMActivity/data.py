@@ -102,20 +102,10 @@ class MMRActionData(Dataset):
         y = torch.tensor(data_point['y'], dtype=self.target_dtype)
         return x, y
 
+
     def _process(self):
         """
-        Loads data from the appropriate folder ('train' or 'test') based on self.partition.
-        Then applies stacking/padding if needed.
-        For 'train'/'val': we load from the train folder, do a stratified 80/20 split
-                           to produce actual train vs val sets.
-        For 'test': we load from the test folder, using all as test data.
-
-        Returns:
-           A dict: {
-               'train': [...],
-               'val': [...],
-               'test': [...]
-           }, num_samples
+        Modified to work with consolidated stacking
         """
         data_list = []
         file_names = self._get_partition_file_names()
@@ -125,13 +115,13 @@ class MMRActionData(Dataset):
             with open(fn, 'rb') as f:
                 data_slice = pickle.load(f)
             data_list.extend(data_slice)
-        data_list = self.stack_and_padd_frames(data_list)
-
+        
+        stacked_data = self.stack_and_padd_frames(data_list)
+        
         if self.partition in ['train', 'val']:
-            labels = [d['y'] for d in data_list]
-            num_samples = len(data_list)
+            labels = [d['y'] for d in stacked_data]  
             train_data, val_data = train_test_split(
-                data_list,
+                stacked_data,  
                 test_size=0.2,
                 random_state=self.seed,
                 shuffle=True,
@@ -142,10 +132,8 @@ class MMRActionData(Dataset):
                 return {'train': train_data, 'val': [], 'test': []}, len(train_data)
             else:  
                 return {'train': [], 'val': val_data, 'test': []}, len(val_data)
-
         else:
-            num_samples = len(data_list)
-            return {'train': [], 'val': [], 'test': data_list}, num_samples
+            return {'train': [], 'val': [], 'test': stacked_data}, len(stacked_data)
 
     def _get_partition_file_names(self):
         """
@@ -161,74 +149,88 @@ class MMRActionData(Dataset):
             file_nums = [0, 1, 2, 3, 4]
             return [os.path.join(self.raw_data_path, 'test', f'{i}.pkl') for i in file_nums]
 
+
     def stack_and_padd_frames(self, data_list):
         """
-        If self.stacks is not None, zero-pad frames for each data point according
-        to the chosen zero-padding style. If it's None, we just return data_list as is.
-
-        Returns:
-            new_data_list: same shape as data_list, but with 'new_x' arrays stacked/padded
+        Stacking and padding function with consolidated mode:
+        - Creates non-overlapping stacks with specified overlap
+        - Returns fewer samples than input (stack_size/stride ratio)
         """
         if self.stacks is None:
             return data_list
 
-        xs = [d['x'] for d in data_list]
-        stacked_xs = []
-        padded_xs = []
-        print("Stacking and padding frames...")
-        pbar = tqdm(total=len(xs))
+        stack_size = self.stacks
+        overlap = 10  
+        stride = stack_size - overlap
 
-        if self.zero_padding in ['per_data_point', 'data_point']:
-            for i in range(len(xs)):
-                data_point = []
-                for j in range(self.stacks):
-                    if i - j >= 0:
-                        mydata_slice = xs[i - j]
-                        diff = self.max_points - mydata_slice.shape[0]
-                        # Pad up to max_points if needed
-                        mydata_slice = np.pad(mydata_slice,
-                                              ((0, max(diff, 0)), (0, 0)),
-                                              mode='constant')
-                        # Then randomly sample exactly max_points
-                        mydata_slice = mydata_slice[
-                            np.random.choice(len(mydata_slice), self.max_points, replace=False)
-                        ]
-                        data_point.append(mydata_slice)
-                    else:
-                        # If we don't have enough past frames, pad with zeros
-                        data_point.append(np.zeros((self.max_points, 3)))
-                # Concatenate all stacked frames for this index
-                padded_xs.append(np.concatenate(data_point, axis=0))
+        stacked_samples = []
+        total_operations = sum([len(range(0, len(segment), stride)) 
+                            for _, segment in self._segment_by_label(data_list)])
+        
+        print(f"Stacking and padding frames (consolidated mode)...")
+        pbar = tqdm(total=total_operations)
+
+        # Process each label segment separately
+        for label, segment_data in self._segment_by_label(data_list):
+            i = 0
+            while i < len(segment_data):
+                # Get current stack window
+                end_idx = min(i + stack_size, len(segment_data))
+                stack_data = segment_data[i:end_idx]
+                
+                # Handle padding by repeating last frame
+                while len(stack_data) < stack_size:
+                    stack_data.append(stack_data[-1] if stack_data else {
+                        'x': np.zeros((self.max_points, 3)),
+                        'y': label
+                    })
+
+                # Process each frame in the stack
+                processed_frames = []
+                for data in stack_data:
+                    x = data['x']
+                    # Handle undersized/oversized frames
+                    if x.shape[0] < self.max_points:
+                        x = np.pad(x, ((0, self.max_points - x.shape[0]), (0, 0)), 'constant')
+                    elif x.shape[0] > self.max_points:
+                        x = x[np.random.choice(x.shape[0], self.max_points, replace=False)]
+                    processed_frames.append(x)
+
+                # Create stacked sample
+                stacked_x = np.concatenate(processed_frames, axis=0)
+                new_sample = {
+                    **stack_data[0],  
+                    'new_x': stacked_x  
+                }
+                stacked_samples.append(new_sample)
                 pbar.update(1)
-
-        elif self.zero_padding in ['per_stack', 'stack']:
-            for i in range(len(xs)):
-                start = max(0, i - self.stacks)
-                stacked_x = np.concatenate(xs[start:i+1], axis=0)
-                stacked_xs.append(stacked_x)
-                pbar.update(0.5)
-
-            for x in stacked_xs:
-                diff = self.max_points * self.stacks - x.shape[0]
-                x = np.pad(x, ((0, max(diff, 0)), (0, 0)), 'constant')
-                x = x[np.random.choice(len(x), self.max_points * self.stacks, replace=False)]
-                padded_xs.append(x)
-                pbar.update(0.5)
-
-        else:
-            raise NotImplementedError(f"Padding style '{self.zero_padding}' is not implemented")
+                i += stride  
 
         pbar.close()
-        print("Stacking and padding frames done")
-        new_data_list = [{**d, 'new_x': px} for d, px in zip(data_list, padded_xs)]
-        return new_data_list
+        print(f"Stacking complete. {len(data_list)} input → {len(stacked_samples)} output samples")
+        return stacked_samples
 
-
+    def _segment_by_label(self, data_list):
+        """Helper to segment data by contiguous labels"""
+        segments = []
+        current_segment = []
+        current_label = data_list[0]['y']
+        
+        for data in data_list:
+            if data['y'] == current_label:
+                current_segment.append(data)
+            else:
+                segments.append((current_label, current_segment))
+                current_segment = [data]
+                current_label = data['y']
+        segments.append((current_label, current_segment))
+        return segments
+    
 if __name__ == "__main__":
     # Example usage and testing
     root_dir = ''  # current directory or provide data path here
     mmr_dataset_config = {
-        'processed_data': 'data/processed/mmr_action_distance/data.pkl',
+        'processed_data': 'data/processed/mmr_action/data.pkl',
         'stacks': 50,             
         'max_points': 22,
         'zero_padding': 'per_data_point',
@@ -240,5 +242,3 @@ if __name__ == "__main__":
     train_dataset = MMRActionData(root=root_dir, partition='train', mmr_dataset_config=mmr_dataset_config)
     val_dataset   = MMRActionData(root=root_dir, partition='val',   mmr_dataset_config=mmr_dataset_config)
     test_dataset  = MMRActionData(root=root_dir, partition='test',  mmr_dataset_config=mmr_dataset_config)
-
-
